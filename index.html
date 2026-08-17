@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sitzplatzgenerator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">Lokale Web-App</p>
+      <h1>Sitzplatzgenerator</h1>
+      <p class="subline">Klassenraum konfigurieren, Regeln festlegen und passende Sitzpläne erzeugen.</p>
+    </div>
+    <div class="header-actions">
+      <button id="saveBtn" class="secondary">Projekt speichern</button>
+      <label class="button secondary file-button">Projekt laden<input id="loadInput" type="file" accept="application/json" /></label>
+      <button id="printBtn" class="secondary">Raumansicht drucken</button>
+      <button id="teacherPrintBtn" class="secondary">Lehreransicht drucken</button>
+      <button id="classbookPrintBtn" class="secondary">Klassenbuch drucken</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section class="card">
+        <div class="section-title">
+          <span class="step">1</span>
+          <div><h2>Projektangaben</h2><p>Werden gespeichert und mitgedruckt.</p></div>
+        </div>
+        <div class="form-grid metadata-grid">
+          <label>Klasse<input id="classNameInput" type="text" placeholder="z. B. 7b" autocomplete="off" /></label>
+          <label>Raum<input id="roomNameInput" type="text" placeholder="z. B. B 204" autocomplete="off" /></label>
+          <label>Fach<input id="subjectInput" type="text" placeholder="z. B. Mathematik" autocomplete="off" /></label>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <span class="step">2</span>
+          <div><h2>Klassenraum</h2><p>Reihen und Plätze festlegen.</p></div>
+        </div>
+        <div class="form-grid two">
+          <label>Reihen<input id="rowsInput" type="number" min="1" max="12" value="5" /></label>
+          <label>Plätze je Reihe<input id="colsInput" type="number" min="1" max="12" value="6" /></label>
+        </div>
+        <label class="room-layout-label">Sitzmöbel
+          <select id="seatLayoutInput">
+            <option value="single">Einzelplätze</option>
+            <option value="double">Doppeltische / Zweierbänke</option>
+          </select>
+        </label>
+        <button id="buildRoomBtn" class="secondary full">Raum neu aufbauen</button>
+        <p class="hint">Bei Doppeltischen bilden jeweils zwei Plätze von links ein Paar. Eine ungerade letzte Spalte bleibt ein Einzelplatz. Klicke auf einen Platz, um ihn zu sperren oder wieder zu aktivieren. Oben ist die Tafel.</p>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <span class="step">3</span>
+          <div><h2>Schülerliste</h2><p>Eine Person pro Zeile.</p></div>
+        </div>
+        <label>
+          Namen und optional Kategorie
+          <textarea id="studentsInput" rows="9" placeholder="Anna;w\nBen;m\nCharlie;d"></textarea>
+        </label>
+        <p class="hint">Format: <strong>Name;Kategorie</strong>. Die Kategorie ist optional und kann z. B. w, m, d oder frei gewählt sein.</p>
+        <div class="inline-actions">
+          <button id="applyStudentsBtn" class="secondary">Liste übernehmen</button>
+          <span id="studentCount" class="badge">0 Schüler</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <span class="step">4</span>
+          <div><h2>Grundprinzipien</h2><p>Allgemeine Optimierungsziele.</p></div>
+        </div>
+        <label class="check-row"><input id="mixCategories" type="checkbox" checked /> Unterschiedliche Kategorien möglichst nebeneinander</label>
+        <label class="check-row"><input id="groupCategories" type="checkbox" /> Gleiche Kategorien möglichst nebeneinander</label>
+        <p class="hint category-principle-hint">Die beiden Kategorie-Prinzipien schließen sich gegenseitig aus.</p>
+        <label class="check-row"><input id="fillFrontFirst" type="checkbox" /> Freie Plätze möglichst von vorne nach hinten füllen</label>
+        <label class="check-row"><input id="avoidEmptyGaps" type="checkbox" checked /> Einzelne Lücken in Reihen vermeiden</label>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <span class="step">5</span>
+          <div><h2>Regeln</h2><p>Muss- und Soll-Vorgaben.</p></div>
+        </div>
+        <div class="rule-form">
+          <label>Schüler A<select id="ruleStudentA"></select></label>
+          <label>Regel<select id="ruleType">
+            <option value="together">muss direkt neben … sitzen</option>
+            <option value="notAdjacent">darf nicht direkt neben … sitzen</option>
+            <option value="notNear">soll nicht in der Nähe von … sitzen</option>
+            <option value="far">soll möglichst weit weg von … sitzen</option>
+            <option value="front">muss vorne sitzen</option>
+            <option value="back">muss hinten sitzen</option>
+            <option value="alone">muss alleine sitzen</option>
+          </select></label>
+          <label id="studentBLabel">Schüler B<select id="ruleStudentB"></select></label>
+          <label id="distanceLabel" class="hidden">Mindestabstand<input id="ruleDistance" type="number" min="2" max="10" value="3" /></label>
+          <label id="priorityLabel">Priorität<select id="rulePriority">
+            <option value="hard">Muss-Regel</option>
+            <option value="soft">Soll-Regel</option>
+          </select></label>
+          <button id="addRuleBtn" class="primary full">Regel hinzufügen</button>
+        </div>
+        <div id="rulesList" class="rules-list empty-state">Noch keine Regeln angelegt.</div>
+      </section>
+
+      <button id="generateBtn" class="generate-button">Sitzplan erzeugen</button>
+    </aside>
+
+    <section class="workspace">
+      <div class="board-header">
+        <div>
+          <p class="eyebrow">Vorschau</p>
+          <h2>Klassenraum</h2>
+          <p id="boardMeta" class="board-meta"></p>
+        </div>
+        <div class="legend">
+          <span><i class="legend-dot active"></i> aktiv</span>
+          <span><i class="legend-dot blocked"></i> gesperrt</span>
+          <span><i class="legend-dot assigned"></i> belegt</span>
+        </div>
+      </div>
+
+      <div class="board-shell">
+        <div class="front-label">TAFEL / VORNE</div>
+        <div id="roomGrid" class="room-grid" aria-label="Klassenraum"></div>
+      </div>
+
+      <div class="results-grid">
+        <section class="card result-card">
+          <div class="result-title-row">
+            <div><h2>Bewertung</h2><p>Wie gut der aktuelle Plan die Vorgaben erfüllt.</p></div>
+            <span id="scoreBadge" class="score-badge neutral">–</span>
+          </div>
+          <div id="resultSummary" class="empty-state">Noch kein Sitzplan erzeugt.</div>
+        </section>
+
+        <section class="card result-card">
+          <h2>Hinweise</h2>
+          <div id="conflictsList" class="empty-state">Konflikte und unerfüllte Wünsche erscheinen hier.</div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <section id="teacherPrintView" class="teacher-print-view" aria-hidden="true">
+    <header class="print-page-header">
+      <div>
+        <p class="print-eyebrow">Sitzplan</p>
+        <h1>Lehrerperspektive</h1>
+        <p id="teacherPrintMeta" class="print-meta"></p>
+      </div>
+      <p id="teacherPrintDate" class="print-date"></p>
+    </header>
+    <p class="print-explanation">Ansicht vom Lehrertisch in Richtung Klasse. Die erste Reihe befindet sich unten.</p>
+    <div class="back-label">HINTEN / RÜCKWAND</div>
+    <div id="teacherRoomGrid" class="teacher-room-grid" aria-label="Sitzplan aus Lehrerperspektive"></div>
+    <div class="teacher-desk">LEHRERTISCH · TAFEL / VORNE</div>
+  </section>
+
+  <section id="classbookPrintView" class="classbook-print-view" aria-hidden="true">
+    <div class="classbook-field">
+      <header class="classbook-header">
+        <div>
+          <p class="print-eyebrow">Sitzplan · Lehrerperspektive</p>
+          <h1 id="classbookTitle">Klasse</h1>
+        </div>
+        <div class="classbook-meta">
+          <span><strong>Raum:</strong> <b id="classbookRoom">–</b></span>
+          <span><strong>Fach:</strong> <b id="classbookSubject">–</b></span>
+          <span><strong>Stand:</strong> <b id="classbookDate">–</b></span>
+        </div>
+      </header>
+      <div class="classbook-back-label">HINTEN</div>
+      <div id="classbookRoomGrid" class="classbook-room-grid" aria-label="Kompakter Sitzplan für das Klassenbuch"></div>
+      <div class="classbook-desk">LEHRERTISCH · TAFEL / VORNE</div>
+    </div>
+    <p class="classbook-cut-note">Sitzplanfeld – zum Einkleben oder Einlegen ins Klassenbuch</p>
+  </section>
+
+  <template id="seatTemplate">
+    <button class="seat" type="button" draggable="false">
+      <span class="seat-number"></span>
+      <strong class="seat-name"></strong>
+      <small class="seat-category"></small>
+    </button>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
