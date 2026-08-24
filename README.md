@@ -76,3 +76,7 @@ Die Muss-Regel **„muss alleine sitzen“** bedeutet:
 ## Lokalen Browserstand löschen
 
 Über **„Lokale Projektdaten löschen“** kann der automatisch im Browser gespeicherte aktuelle Stand vollständig entfernt werden. Vor dem Löschen erscheint eine Sicherheitsabfrage. Danach startet die Anwendung mit einem leeren Standardprojekt neu. Bereits über **„Projekt speichern“** exportierte JSON-Dateien auf dem Rechner werden dabei nicht gelöscht und können jederzeit wieder über **„Projekt laden“** geöffnet werden.
+
+
+---
+© 2026 Oliver Richter

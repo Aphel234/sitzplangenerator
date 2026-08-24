@@ -342,3 +342,16 @@ button.danger:hover {
   background: #fff2f2;
   border-color: #a93636;
 }
+
+
+/* Urheberhinweis */
+.site-credit {
+  padding: 4px 24px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: .78rem;
+}
+
+@media print {
+  .site-credit { display: none !important; }
+}
