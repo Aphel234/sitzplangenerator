@@ -1,5 +1,8 @@
 'use strict';
 
+const STORAGE_KEY = 'sitzplatzgenerator-v1';
+let suppressLocalSave = false;
+
 const state = {
   rows: 5,
   cols: 6,
@@ -28,6 +31,7 @@ const els = {
   studentCount: document.querySelector('#studentCount'),
   mixCategories: document.querySelector('#mixCategories'),
   groupCategories: document.querySelector('#groupCategories'),
+  everyoneHasNeighbor: document.querySelector('#everyoneHasNeighbor'),
   fillFrontFirst: document.querySelector('#fillFrontFirst'),
   avoidEmptyGaps: document.querySelector('#avoidEmptyGaps'),
   ruleStudentA: document.querySelector('#ruleStudentA'),
@@ -37,6 +41,8 @@ const els = {
   rulePriority: document.querySelector('#rulePriority'),
   studentBLabel: document.querySelector('#studentBLabel'),
   distanceLabel: document.querySelector('#distanceLabel'),
+  seatLabel: document.querySelector('#seatLabel'),
+  ruleSeat: document.querySelector('#ruleSeat'),
   priorityLabel: document.querySelector('#priorityLabel'),
   addRuleBtn: document.querySelector('#addRuleBtn'),
   rulesList: document.querySelector('#rulesList'),
@@ -46,6 +52,7 @@ const els = {
   scoreBadge: document.querySelector('#scoreBadge'),
   saveBtn: document.querySelector('#saveBtn'),
   loadInput: document.querySelector('#loadInput'),
+  clearLocalBtn: document.querySelector('#clearLocalBtn'),
   printBtn: document.querySelector('#printBtn'),
   teacherPrintBtn: document.querySelector('#teacherPrintBtn'),
   classbookPrintBtn: document.querySelector('#classbookPrintBtn'),
@@ -69,6 +76,63 @@ function parseSeatKey(key) {
 function uid() { return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`; }
 function studentById(id) { return state.students.find(s => s.id === id); }
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+
+function seatDisplayName(key) {
+  const { row, col } = parseSeatKey(key);
+  return `Reihe ${row + 1}, Platz ${col + 1}`;
+}
+
+function fixedSeatRules() { return state.rules.filter(rule => rule.type === 'fixedSeat'); }
+function fixedSeatForStudent(studentId) { return fixedSeatRules().find(rule => rule.a === studentId)?.seat || null; }
+function fixedStudentForSeat(key) { return fixedSeatRules().find(rule => rule.seat === key)?.a || null; }
+function isFixedSeat(key) { return Boolean(fixedStudentForSeat(key)); }
+function isFixedStudent(studentId) { return Boolean(fixedSeatForStudent(studentId)); }
+
+function updateSeatOptions() {
+  if (!els.ruleSeat) return;
+  const previous = els.ruleSeat.value;
+  const seats = activeSeatKeys().sort((a, b) => {
+    const pa = parseSeatKey(a), pb = parseSeatKey(b);
+    return pa.row - pb.row || pa.col - pb.col;
+  });
+  els.ruleSeat.innerHTML = seats.length
+    ? seats.map(key => `<option value="${escapeHtml(key)}">${escapeHtml(seatDisplayName(key))}</option>`).join('')
+    : '<option value="">Keine aktiven Plätze</option>';
+  if (previous && state.activeSeats.has(previous)) els.ruleSeat.value = previous;
+}
+
+function validateFixedSeatRules() {
+  const errors = [];
+  const assignment = new Map();
+  const seenStudents = new Map();
+  const seenSeats = new Map();
+
+  for (const rule of fixedSeatRules()) {
+    const student = studentById(rule.a);
+    if (!student) {
+      errors.push('Eine feste Platzzuweisung verweist auf einen unbekannten Schüler.');
+      continue;
+    }
+    if (!rule.seat || !state.activeSeats.has(rule.seat)) {
+      errors.push(`${student.name}: Der fest zugewiesene Platz ist nicht aktiv.`);
+      continue;
+    }
+    if (seenStudents.has(rule.a) && seenStudents.get(rule.a) !== rule.seat) {
+      errors.push(`${student.name} wurde mehreren festen Plätzen zugewiesen.`);
+      continue;
+    }
+    if (seenSeats.has(rule.seat) && seenSeats.get(rule.seat) !== rule.a) {
+      const other = studentById(seenSeats.get(rule.seat))?.name || 'Ein anderer Schüler';
+      errors.push(`${seatDisplayName(rule.seat)} ist sowohl ${other} als auch ${student.name} zugewiesen.`);
+      continue;
+    }
+    seenStudents.set(rule.a, rule.seat);
+    seenSeats.set(rule.seat, rule.a);
+    assignment.set(rule.seat, rule.a);
+  }
+
+  return { errors, assignment };
+}
 
 function readMetadataFromInputs() {
   state.metadata = {
@@ -112,6 +176,9 @@ function initRoom(rows = state.rows, cols = state.cols, keepBlocked = false) {
     }
   }
   state.assignment.clear();
+  state.rules = state.rules.filter(rule => rule.type !== 'fixedSeat' || state.activeSeats.has(rule.seat));
+  renderRules();
+  updateSeatOptions();
   renderRoom();
 }
 
@@ -132,13 +199,20 @@ function renderRoom() {
       node.classList.toggle('blocked', !active);
       node.setAttribute('aria-pressed', String(!active));
 
+      const fixedStudentId = fixedStudentForSeat(key);
       const studentId = state.assignment.get(key);
       const student = studentById(studentId);
+      if (fixedStudentId && active) {
+        node.classList.add('fixed-seat');
+        node.title = `Fest zugewiesen: ${studentById(fixedStudentId)?.name || 'Schüler'}`;
+        node.querySelector('.seat-number').textContent = `📌 R${r + 1} · P${c + 1}`;
+      }
       if (student && active) {
         node.classList.add('assigned');
         node.querySelector('.seat-name').textContent = student.name;
         node.querySelector('.seat-category').textContent = student.category || '';
-        node.draggable = true;
+        node.draggable = !isFixedStudent(student.id);
+        node.classList.toggle('fixed-occupant', isFixedStudent(student.id));
       } else {
         node.querySelector('.seat-name').textContent = active ? 'Freier Platz' : 'Gesperrt';
         node.querySelector('.seat-category').textContent = '';
@@ -155,15 +229,28 @@ function renderRoom() {
 }
 
 function toggleSeat(key) {
+  const fixedRule = fixedSeatRules().find(rule => rule.seat === key);
+  let fixedRemovalConfirmed = false;
+  if (state.activeSeats.has(key) && fixedRule) {
+    const name = studentById(fixedRule.a)?.name || 'Ein Schüler';
+    if (!confirm(`${seatDisplayName(key)} ist ${name} fest zugewiesen. Zuweisung entfernen und Platz sperren?`)) return;
+    fixedRemovalConfirmed = true;
+  }
   if (state.assignment.size > 0) {
     const occupied = state.assignment.has(key);
-    if (occupied && !confirm('Dieser Platz ist belegt. Platz trotzdem sperren und Schüler neu verteilen?')) return;
+    if (occupied && !fixedRemovalConfirmed && !confirm('Dieser Platz ist belegt. Platz trotzdem sperren und Schüler neu verteilen?')) return;
     state.assignment.clear();
     clearResults();
   }
+  if (fixedRemovalConfirmed) {
+    state.rules = state.rules.filter(rule => rule.id !== fixedRule.id);
+    renderRules();
+  }
   if (state.activeSeats.has(key)) state.activeSeats.delete(key);
   else state.activeSeats.add(key);
+  updateSeatOptions();
   renderRoom();
+  saveLocal();
 }
 
 let draggedSeatKey = null;
@@ -187,11 +274,27 @@ function onDrop(event) {
   const fromStudent = state.assignment.get(from);
   const toStudent = state.assignment.get(to);
   if (!fromStudent) return;
+  const fromFixedSeat = fixedSeatForStudent(fromStudent);
+  const toFixedStudent = fixedStudentForSeat(to);
+  const displacedFixedSeat = toStudent ? fixedSeatForStudent(toStudent) : null;
+  if (fromFixedSeat && fromFixedSeat !== to) {
+    alert(`${studentById(fromStudent)?.name || 'Dieser Schüler'} hat einen festen Sitzplatz und kann nicht verschoben werden.`);
+    return;
+  }
+  if (toFixedStudent && toFixedStudent !== fromStudent) {
+    alert(`Dieser Platz ist ${studentById(toFixedStudent)?.name || 'einem anderen Schüler'} fest zugewiesen.`);
+    return;
+  }
+  if (toStudent && displacedFixedSeat === to) {
+    alert(`${studentById(toStudent)?.name || 'Der Schüler auf diesem Platz'} hat einen festen Sitzplatz und kann nicht getauscht werden.`);
+    return;
+  }
   state.assignment.set(to, fromStudent);
   if (toStudent) state.assignment.set(from, toStudent);
   else state.assignment.delete(from);
   renderRoom();
   showEvaluation(evaluateAssignment(state.assignment));
+  saveLocal();
 }
 
 function applyStudents() {
@@ -226,6 +329,7 @@ function updateStudentUI() {
     : '<option value="">Keine Schüler</option>';
   els.ruleStudentA.innerHTML = options;
   els.ruleStudentB.innerHTML = options;
+  updateSeatOptions();
 }
 
 function applyDeskClasses(node, col, reversed = false) {
@@ -248,7 +352,9 @@ function updateRuleFormVisibility() {
   const needsB = ['together', 'notAdjacent', 'notNear', 'far'].includes(type);
   els.studentBLabel.classList.toggle('hidden', !needsB);
   els.distanceLabel.classList.toggle('hidden', type !== 'notNear');
-  if (type === 'front' || type === 'back' || type === 'alone' || type === 'together' || type === 'notAdjacent') {
+  els.seatLabel.classList.toggle('hidden', type !== 'fixedSeat');
+  els.rulePriority.disabled = type === 'fixedSeat';
+  if (type === 'front' || type === 'back' || type === 'alone' || type === 'fixedSeat' || type === 'together' || type === 'notAdjacent') {
     els.rulePriority.value = 'hard';
   }
 }
@@ -259,17 +365,27 @@ function addRule() {
   const a = els.ruleStudentA.value;
   const needsB = ['together', 'notAdjacent', 'notNear', 'far'].includes(type);
   const b = needsB ? els.ruleStudentB.value : null;
+  const seat = type === 'fixedSeat' ? els.ruleSeat.value : null;
   if (needsB && a === b) return alert('Bitte zwei unterschiedliche Schüler auswählen.');
+  if (type === 'fixedSeat') {
+    if (!seat || !state.activeSeats.has(seat)) return alert('Bitte einen aktiven Sitzplatz auswählen.');
+    const existingStudentRule = fixedSeatRules().find(rule => rule.a === a);
+    if (existingStudentRule) return alert(`${studentById(a)?.name || 'Dieser Schüler'} hat bereits einen festen Sitzplatz. Bitte die bestehende Regel zuerst löschen.`);
+    const existingSeatRule = fixedSeatRules().find(rule => rule.seat === seat);
+    if (existingSeatRule) return alert(`${seatDisplayName(seat)} ist bereits ${studentById(existingSeatRule.a)?.name || 'einem Schüler'} zugewiesen.`);
+  }
   const rule = {
     id: uid(),
     type,
     a,
     b,
+    seat,
     distance: type === 'notNear' ? clamp(Number(els.ruleDistance.value) || 3, 2, 10) : null,
-    priority: els.rulePriority.value,
+    priority: type === 'fixedSeat' ? 'hard' : els.rulePriority.value,
   };
   state.rules.push(rule);
   renderRules();
+  renderRoom();
   saveLocal();
 }
 
@@ -284,6 +400,7 @@ function ruleLabel(rule) {
     front: `${a} muss vorne sitzen`,
     back: `${a} muss hinten sitzen`,
     alone: `${a} muss alleine sitzen`,
+    fixedSeat: `${a} muss auf ${rule.seat ? seatDisplayName(rule.seat) : 'einem festen Platz'} sitzen`,
   };
   return labels[rule.type] || 'Unbekannte Regel';
 }
@@ -303,6 +420,7 @@ function renderRules() {
     item.querySelector('button').addEventListener('click', () => {
       state.rules = state.rules.filter(r => r.id !== rule.id);
       renderRules();
+      renderRoom();
       saveLocal();
     });
     els.rulesList.appendChild(item);
@@ -349,7 +467,7 @@ function evaluateAssignment(assignment) {
   for (const rule of state.rules) {
     const aPos = positions.get(rule.a);
     const bPos = rule.b ? positions.get(rule.b) : null;
-    if (!aPos || (rule.b && !bPos)) continue;
+    if (rule.type !== 'fixedSeat' && (!aPos || (rule.b && !bPos))) continue;
     let satisfied = true;
     let penalty = 0;
 
@@ -369,6 +487,7 @@ function evaluateAssignment(assignment) {
     if (rule.type === 'front') satisfied = isFront(aPos);
     if (rule.type === 'back') satisfied = isBack(aPos);
     if (rule.type === 'alone') satisfied = sitsAlone(assignment, aPos);
+    if (rule.type === 'fixedSeat') satisfied = Boolean(aPos && rule.seat && seatKey(aPos.row, aPos.col) === rule.seat);
 
     if (rule.priority === 'hard') {
       if (!satisfied) {
@@ -394,6 +513,31 @@ function evaluateAssignment(assignment) {
       const sameCategory = item.student.category.localeCompare(right.student.category, 'de', { sensitivity: 'base' }) === 0;
       if (els.mixCategories.checked && sameCategory) softPenalty += 3;
       if (els.groupCategories.checked && !sameCategory) softPenalty += 3;
+    }
+  }
+  if (els.everyoneHasNeighbor.checked) {
+    const mustSitAlone = new Set(state.rules
+      .filter(rule => rule.type === 'alone' && rule.priority === 'hard')
+      .map(rule => rule.a));
+    const withoutNeighbor = [];
+    for (const item of occupied) {
+      if (mustSitAlone.has(item.student?.id)) continue;
+      softPossible += 4;
+      const hasNeighbor = occupied.some(other =>
+        other.student?.id !== item.student?.id && isHorizontalNeighbor(item.pos, other.pos)
+      );
+      if (!hasNeighbor) {
+        softPenalty += 4;
+        if (item.student?.name) withoutNeighbor.push(item.student.name);
+      }
+    }
+    if (withoutNeighbor.length) {
+      const names = withoutNeighbor.slice(0, 6).join(', ');
+      const suffix = withoutNeighbor.length > 6 ? ` und ${withoutNeighbor.length - 6} weitere` : '';
+      conflicts.push({
+        hard: false,
+        text: `${withoutNeighbor.length} ${withoutNeighbor.length === 1 ? 'Schüler hat' : 'Schüler haben'} keinen direkten Nachbarn: ${names}${suffix}`,
+      });
     }
   }
   if (els.fillFrontFirst.checked) {
@@ -432,22 +576,25 @@ function shuffled(array) {
 }
 
 function createInitialAssignment(seats) {
+  const fixed = validateFixedSeatRules().assignment;
+  const fixedStudents = new Set(fixed.values());
+  const availableSeats = seats.filter(key => !fixed.has(key));
   const seatOrder = els.fillFrontFirst.checked
-    ? [...seats].sort((a, b) => {
+    ? [...availableSeats].sort((a, b) => {
         const pa = parseSeatKey(a), pb = parseSeatKey(b);
         return pa.row - pb.row || pa.col - pb.col;
       })
-    : shuffled(seats);
-  const studentOrder = shuffled(state.students);
-  const assignment = new Map();
+    : shuffled(availableSeats);
+  const studentOrder = shuffled(state.students.filter(student => !fixedStudents.has(student.id)));
+  const assignment = new Map(fixed);
   studentOrder.forEach((student, index) => assignment.set(seatOrder[index], student.id));
   return assignment;
 }
 
 function mutateAssignment(assignment, seats) {
   const next = new Map(assignment);
-  const occupiedSeats = [...next.keys()];
-  const emptySeats = seats.filter(key => !next.has(key));
+  const occupiedSeats = [...next.keys()].filter(key => !isFixedSeat(key) && !isFixedStudent(next.get(key)));
+  const emptySeats = seats.filter(key => !next.has(key) && !isFixedSeat(key));
   if (occupiedSeats.length < 1) return next;
 
   if (emptySeats.length && Math.random() < .28) {
@@ -473,6 +620,10 @@ function generatePlan() {
   const seats = activeSeatKeys();
   if (!state.students.length) return alert('Bitte mindestens einen Schüler eintragen.');
   if (seats.length < state.students.length) return alert(`Es gibt nur ${seats.length} aktive Plätze für ${state.students.length} Schüler.`);
+  const fixedValidation = validateFixedSeatRules();
+  if (fixedValidation.errors.length) {
+    return alert(`Die festen Platzzuweisungen sind nicht gültig:\n\n${fixedValidation.errors.join('\n')}`);
+  }
 
   let globalBest = null;
   let globalEval = null;
@@ -549,14 +700,28 @@ function clearResults() {
 }
 
 function saveLocal() {
+  if (suppressLocalSave) return;
   const payload = serializeState();
-  localStorage.setItem('sitzplatzgenerator-v1', JSON.stringify(payload));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+}
+
+function clearLocalProject() {
+  const confirmed = window.confirm(
+    'Lokale Projektdaten wirklich löschen?\n\n' +
+    'Der aktuell im Browser gespeicherte Stand wird entfernt und die Anwendung startet leer neu. ' +
+    'Bereits als JSON-Datei gespeicherte Projekte auf deinem Rechner bleiben erhalten.'
+  );
+  if (!confirmed) return;
+
+  suppressLocalSave = true;
+  localStorage.removeItem(STORAGE_KEY);
+  window.location.reload();
 }
 
 function serializeState() {
   readMetadataFromInputs();
   return {
-    version: 4,
+    version: 6,
     metadata: { ...state.metadata },
     rows: state.rows,
     cols: state.cols,
@@ -569,6 +734,7 @@ function serializeState() {
     options: {
       mixCategories: els.mixCategories.checked,
       groupCategories: els.groupCategories.checked,
+      everyoneHasNeighbor: els.everyoneHasNeighbor.checked,
       fillFrontFirst: els.fillFrontFirst.checked,
       avoidEmptyGaps: els.avoidEmptyGaps.checked,
     },
@@ -576,7 +742,7 @@ function serializeState() {
 }
 
 function restoreState(data) {
-  if (!data || ![1, 2, 3, 4].includes(data.version)) throw new Error('Unbekanntes Dateiformat.');
+  if (!data || ![1, 2, 3, 4, 5, 6].includes(data.version)) throw new Error('Unbekanntes Dateiformat.');
   state.metadata = {
     className: data.metadata?.className || '',
     roomName: data.metadata?.roomName || '',
@@ -599,8 +765,10 @@ function restoreState(data) {
   els.mixCategories.checked = data.options?.mixCategories ?? true;
   els.groupCategories.checked = data.options?.groupCategories ?? false;
   if (els.mixCategories.checked && els.groupCategories.checked) els.groupCategories.checked = false;
+  els.everyoneHasNeighbor.checked = data.options?.everyoneHasNeighbor ?? false;
   els.fillFrontFirst.checked = data.options?.fillFrontFirst ?? false;
   els.avoidEmptyGaps.checked = data.options?.avoidEmptyGaps ?? true;
+  state.rules = state.rules.filter(rule => rule.type !== 'fixedSeat' || (rule.seat && state.activeSeats.has(rule.seat)));
   renderMetadata();
   updateStudentUI();
   renderRules();
@@ -636,7 +804,7 @@ function renderTeacherPrintView() {
 
       const name = document.createElement('strong');
       name.className = 'print-seat-name';
-      name.textContent = !active ? 'Gesperrt' : (student?.name || 'Freier Platz');
+      name.textContent = !active ? 'Gesperrt' : (student ? `${isFixedSeat(key) ? '📌 ' : ''}${student.name}` : 'Freier Platz');
 
       const category = document.createElement('small');
       category.className = 'print-seat-category';
@@ -671,7 +839,7 @@ function renderClassbookPrintView() {
       seat.classList.toggle('assigned', Boolean(student && active));
 
       const name = document.createElement('strong');
-      name.textContent = !active ? '—' : (student?.name || '');
+      name.textContent = !active ? '—' : (student ? `${isFixedSeat(key) ? '📌 ' : ''}${student.name}` : '');
       seat.appendChild(name);
       els.classbookRoomGrid.appendChild(seat);
     }
@@ -746,6 +914,7 @@ els.ruleType.addEventListener('change', updateRuleFormVisibility);
 els.addRuleBtn.addEventListener('click', addRule);
 els.generateBtn.addEventListener('click', generatePlan);
 els.saveBtn.addEventListener('click', downloadProject);
+els.clearLocalBtn.addEventListener('click', clearLocalProject);
 els.printBtn.addEventListener('click', printRoomView);
 els.teacherPrintBtn.addEventListener('click', printTeacherView);
 els.classbookPrintBtn.addEventListener('click', printClassbookView);
@@ -779,14 +948,14 @@ els.seatLayoutInput.addEventListener('change', () => {
   renderRoom();
   saveLocal();
 });
-[els.fillFrontFirst, els.avoidEmptyGaps].forEach(el => el.addEventListener('change', saveLocal));
+[els.everyoneHasNeighbor, els.fillFrontFirst, els.avoidEmptyGaps].forEach(el => el.addEventListener('change', saveLocal));
 [els.classNameInput, els.roomNameInput, els.subjectInput].forEach(el => {
   el.addEventListener('input', () => { readMetadataFromInputs(); saveLocal(); });
 });
 window.addEventListener('beforeunload', saveLocal);
 
 (function boot() {
-  const saved = localStorage.getItem('sitzplatzgenerator-v1');
+  const saved = localStorage.getItem(STORAGE_KEY);
   if (saved) {
     try { restoreState(JSON.parse(saved)); return; } catch { /* fall through */ }
   }

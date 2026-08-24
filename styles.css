@@ -85,6 +85,7 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(49,87,213,.1
 .legend-dot { width: 11px; height: 11px; border-radius: 3px; border: 1px solid #bbc5d1; background: white; }
 .legend-dot.blocked { background: #d0d5dd; }
 .legend-dot.assigned { background: #dce5ff; border-color: #8ca3ef; }
+.legend-dot.fixed { background: #fff3cd; border-color: #c99700; box-shadow: inset 0 0 0 2px white; }
 .board-shell { background: white; border: 1px solid var(--line); border-radius: 22px; padding: 20px; box-shadow: var(--shadow); overflow: auto; }
 .front-label { width: min(520px, 78%); margin: 0 auto 28px; text-align: center; padding: 9px; background: #1d2939; color: white; border-radius: 7px; font-size: .78rem; font-weight: 800; letter-spacing: .13em; }
 .room-grid { display: grid; gap: 12px; min-width: 520px; }
@@ -96,6 +97,9 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(49,87,213,.1
 .seat:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(18,33,64,.1); border-color: #8497b1; }
 .seat.blocked { background: repeating-linear-gradient(-45deg,#e9edf2,#e9edf2 8px,#dfe4ea 8px,#dfe4ea 16px); color: #667085; opacity: .78; }
 .seat.assigned { background: #eef3ff; border-color: #8ea5ee; cursor: grab; }
+.seat.fixed-seat { border: 2px solid #c99700; box-shadow: inset 0 0 0 2px rgba(255,243,205,.85); }
+.seat.fixed-seat:not(.assigned) { background: #fffbeb; }
+.seat.fixed-occupant { cursor: not-allowed; }
 .seat.drag-over { outline: 3px solid rgba(49,87,213,.25); }
 .seat-number { font-size: .68rem; color: #98a2b3; }
 .seat-name { align-self: center; font-size: .93rem; overflow-wrap: anywhere; }
@@ -326,4 +330,15 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(49,87,213,.1
     font-size: 6.5pt;
     color: #555;
   }
+}
+
+
+/* Destruktive Aktion: lokale Browserdaten löschen */
+button.danger {
+  border-color: #c94b4b;
+  color: #8f2929;
+}
+button.danger:hover {
+  background: #fff2f2;
+  border-color: #a93636;
 }

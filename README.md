@@ -26,13 +26,19 @@ Es ist kein Server nötig. Die Daten bleiben im Browser und werden zusätzlich i
 - vorne sitzen
 - hinten sitzen
 - alleine sitzen (abhängig von Einzelplatz oder Doppeltisch)
+- fester Sitzplatz für einen bestimmten Schüler
 - allgemeine Mischung nach frei definierbarer Kategorie
 
 ## Bedienung
 
 - Plätze können durch Anklicken gesperrt oder aktiviert werden.
 - Belegte Plätze können per Drag-and-drop getauscht werden.
+- Fest zugewiesene Schüler und ihre reservierten Plätze sind mit einer Stecknadel markiert und können nicht versehentlich verschoben werden.
 - Projekte lassen sich als JSON speichern und wieder laden.
+
+## Feste Sitzplätze
+
+Unter **Regeln** lässt sich „muss auf einem festen Platz sitzen“ auswählen. Danach werden Schüler und Sitzplatz fest miteinander verbunden. Der Generator setzt diese Person bei jeder neuen Berechnung zuerst auf den ausgewählten Platz und verändert die Zuweisung während der Optimierung nicht. Derselbe Schüler kann nicht zweimal fixiert werden und ein Platz kann nicht mehreren Schülern zugewiesen werden.
 
 ## Druckausgaben
 
@@ -42,12 +48,15 @@ Es ist kein Server nötig. Die Daten bleiben im Browser und werden zusätzlich i
 
 Alle Druckansichten können im Druckdialog des Browsers auch als PDF gespeichert werden.
 
-## Kategorie-Prinzipien
+## Grundprinzipien
 
 - Unterschiedliche Kategorien möglichst nebeneinander
 - Gleiche Kategorien möglichst nebeneinander
+- Möglichst jeder soll einen direkten Nachbarn haben
+- Freie Plätze möglichst von vorne nach hinten füllen
+- Einzelne Lücken in Reihen vermeiden
 
-Beide Prinzipien schließen sich gegenseitig aus und beziehen sich auf direkte linke/rechte Nachbarplätze.
+Die beiden Kategorie-Prinzipien schließen sich gegenseitig aus. Alle Nachbarschaftsprinzipien beziehen sich auf direkte linke/rechte Nachbarplätze. Bei Doppeltischen zählt ausschließlich der Partnerplatz desselben Tisches. Schüler mit der Muss-Regel **„muss alleine sitzen“** sind vom Prinzip „möglichst jeder soll einen Nachbarn haben“ ausgenommen.
 
 ## Einzelplätze und Doppeltische
 
@@ -62,3 +71,8 @@ Die Muss-Regel **„muss alleine sitzen“** bedeutet:
 ## Druckkorrektur
 
 - Klassenbuch-Druckansicht ohne zusätzliche Leerseite
+
+
+## Lokalen Browserstand löschen
+
+Über **„Lokale Projektdaten löschen“** kann der automatisch im Browser gespeicherte aktuelle Stand vollständig entfernt werden. Vor dem Löschen erscheint eine Sicherheitsabfrage. Danach startet die Anwendung mit einem leeren Standardprojekt neu. Bereits über **„Projekt speichern“** exportierte JSON-Dateien auf dem Rechner werden dabei nicht gelöscht und können jederzeit wieder über **„Projekt laden“** geöffnet werden.

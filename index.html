@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sitzplatzgenerator O.R.</title>
+  <title>Sitzplatzgenerator</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -16,6 +16,7 @@
     <div class="header-actions">
       <button id="saveBtn" class="secondary">Projekt speichern</button>
       <label class="button secondary file-button">Projekt laden<input id="loadInput" type="file" accept="application/json" /></label>
+      <button id="clearLocalBtn" class="secondary danger">Lokale Projektdaten löschen</button>
       <button id="printBtn" class="secondary">Raumansicht drucken</button>
       <button id="teacherPrintBtn" class="secondary">Lehreransicht drucken</button>
       <button id="classbookPrintBtn" class="secondary">Klassenbuch drucken</button>
@@ -79,6 +80,8 @@
         <label class="check-row"><input id="mixCategories" type="checkbox" checked /> Unterschiedliche Kategorien möglichst nebeneinander</label>
         <label class="check-row"><input id="groupCategories" type="checkbox" /> Gleiche Kategorien möglichst nebeneinander</label>
         <p class="hint category-principle-hint">Die beiden Kategorie-Prinzipien schließen sich gegenseitig aus.</p>
+        <label class="check-row"><input id="everyoneHasNeighbor" type="checkbox" /> Möglichst jeder soll einen direkten Nachbarn haben</label>
+        <p class="hint">Bei Doppeltischen zählt nur der Partner am selben Tisch, bei Einzelplätzen der direkt belegte Platz links oder rechts. Schüler mit der Muss-Regel „alleine sitzen“ sind ausgenommen.</p>
         <label class="check-row"><input id="fillFrontFirst" type="checkbox" /> Freie Plätze möglichst von vorne nach hinten füllen</label>
         <label class="check-row"><input id="avoidEmptyGaps" type="checkbox" checked /> Einzelne Lücken in Reihen vermeiden</label>
       </section>
@@ -98,9 +101,11 @@
             <option value="front">muss vorne sitzen</option>
             <option value="back">muss hinten sitzen</option>
             <option value="alone">muss alleine sitzen</option>
+            <option value="fixedSeat">muss auf einem festen Platz sitzen</option>
           </select></label>
           <label id="studentBLabel">Schüler B<select id="ruleStudentB"></select></label>
           <label id="distanceLabel" class="hidden">Mindestabstand<input id="ruleDistance" type="number" min="2" max="10" value="3" /></label>
+          <label id="seatLabel" class="hidden">Fester Sitzplatz<select id="ruleSeat"></select></label>
           <label id="priorityLabel">Priorität<select id="rulePriority">
             <option value="hard">Muss-Regel</option>
             <option value="soft">Soll-Regel</option>
@@ -124,6 +129,7 @@
           <span><i class="legend-dot active"></i> aktiv</span>
           <span><i class="legend-dot blocked"></i> gesperrt</span>
           <span><i class="legend-dot assigned"></i> belegt</span>
+          <span><i class="legend-dot fixed"></i> fest zugewiesen</span>
         </div>
       </div>
 
