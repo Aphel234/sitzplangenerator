@@ -25,7 +25,7 @@ Es ist kein Server nötig. Die Daten bleiben im Browser und werden zusätzlich i
 - möglichst weit auseinander
 - vorne sitzen
 - hinten sitzen
-- alleine sitzen (abhängig von Einzelplatz oder Doppeltisch)
+- alleine sitzen (abhängig von Einzelplatz, Doppeltisch oder Gruppentisch)
 - fester Sitzplatz für einen bestimmten Schüler
 - allgemeine Mischung nach frei definierbarer Kategorie
 
@@ -56,16 +56,19 @@ Alle Druckansichten können im Druckdialog des Browsers auch als PDF gespeichert
 - Freie Plätze möglichst von vorne nach hinten füllen
 - Einzelne Lücken in Reihen vermeiden
 
-Die beiden Kategorie-Prinzipien schließen sich gegenseitig aus. Alle Nachbarschaftsprinzipien beziehen sich auf direkte linke/rechte Nachbarplätze. Bei Doppeltischen zählt ausschließlich der Partnerplatz desselben Tisches. Schüler mit der Muss-Regel **„muss alleine sitzen“** sind vom Prinzip „möglichst jeder soll einen Nachbarn haben“ ausgenommen.
+Die beiden Kategorie-Prinzipien schließen sich gegenseitig aus. Bei Einzelplätzen beziehen sich Nachbarschaftsprinzipien auf direkte linke/rechte Nachbarplätze. Bei Doppeltischen zählt ausschließlich der Partnerplatz desselben Tisches. Bei Gruppentischen zählen die unmittelbar benachbarten Stühle am selben Gruppentisch. Schüler mit der Muss-Regel **„muss alleine sitzen“** sind vom Prinzip „möglichst jeder soll einen Nachbarn haben“ ausgenommen.
 
-## Einzelplätze und Doppeltische
+## Einzelplätze, Doppeltische und Gruppentische
 
-Unter **Klassenraum → Sitzmöbel** lässt sich zwischen Einzelplätzen und Doppeltischen/Zweierbänken wählen. Bei Doppeltischen werden die Plätze jeder Reihe paarweise von links zusammengefasst; bei einer ungeraden Spaltenzahl bleibt der letzte Platz ein Einzelplatz. Regeln wie „direkt nebeneinander“ beziehen sich bei Doppeltischen nur auf die beiden Plätze desselben Tisches.
+Unter **Klassenraum → Raumart** lässt sich zwischen Einzelplätzen, Doppeltischen/Zweierbänken und Gruppentischen wählen. Bei Gruppentischen werden die **Anzahl der Tische** und die **Plätze pro Tisch** festgelegt. Jeder Gruppentisch kann anschließend individuell auf 0°, ±15°, ±30°, 45° oder 90° ausgerichtet werden; die Ausrichtung wird im Projekt gespeichert und in den Druckansichten übernommen.
+
+Bei Doppeltischen werden die Plätze jeder Reihe paarweise von links zusammengefasst; bei einer ungeraden Spaltenzahl bleibt der letzte Platz ein Einzelplatz. Regeln wie „direkt nebeneinander“ beziehen sich bei Doppeltischen nur auf die beiden Plätze desselben Tisches.
 
 Die Muss-Regel **„muss alleine sitzen“** bedeutet:
 
 - bei Doppeltischen: Der zweite Platz desselben Tisches bleibt frei,
-- bei Einzelplätzen: Links und rechts direkt daneben darf niemand sitzen.
+- bei Einzelplätzen: Links und rechts direkt daneben darf niemand sitzen,
+- bei Gruppentischen: Die Person sitzt als einzige Person am gesamten Gruppentisch.
 
 
 ## Druckkorrektur

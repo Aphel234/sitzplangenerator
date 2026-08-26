@@ -40,20 +40,42 @@
       <section class="card">
         <div class="section-title">
           <span class="step">2</span>
-          <div><h2>Klassenraum</h2><p>Reihen und Plätze festlegen.</p></div>
+          <div><h2>Klassenraum</h2><p>Raumart und Plätze festlegen.</p></div>
         </div>
-        <div class="form-grid two">
-          <label>Reihen<input id="rowsInput" type="number" min="1" max="12" value="5" /></label>
-          <label>Plätze je Reihe<input id="colsInput" type="number" min="1" max="12" value="6" /></label>
-        </div>
-        <label class="room-layout-label">Sitzmöbel
+        <label class="room-layout-label">Raumart
           <select id="seatLayoutInput">
             <option value="single">Einzelplätze</option>
             <option value="double">Doppeltische / Zweierbänke</option>
+            <option value="group">Gruppentische</option>
           </select>
         </label>
+        <div id="standardRoomSettings" class="form-grid two">
+          <label>Reihen<input id="rowsInput" type="number" min="1" max="12" value="5" /></label>
+          <label>Plätze je Reihe<input id="colsInput" type="number" min="1" max="12" value="6" /></label>
+        </div>
+        <div id="groupRoomSettings" class="hidden">
+          <div class="form-grid two">
+            <label>Anzahl Gruppentische<input id="groupTableCountInput" type="number" min="1" max="16" value="6" /></label>
+            <label>Plätze pro Tisch<input id="groupSeatsPerTableInput" type="number" min="2" max="10" value="4" /></label>
+          </div>
+          <div id="groupRotationControls" class="group-rotation-controls">
+            <label>Tisch ausrichten<select id="groupRotationTable"></select></label>
+            <label>Winkel
+              <select id="groupRotationAngle">
+                <option value="0">0° gerade</option>
+                <option value="-30">−30°</option>
+                <option value="-15">−15°</option>
+                <option value="15">15°</option>
+                <option value="30">30°</option>
+                <option value="45">45°</option>
+                <option value="90">90°</option>
+              </select>
+            </label>
+            <button id="applyGroupRotationBtn" type="button" class="secondary">Ausrichtung übernehmen</button>
+          </div>
+        </div>
         <button id="buildRoomBtn" class="secondary full">Raum neu aufbauen</button>
-        <p class="hint">Bei Doppeltischen bilden jeweils zwei Plätze von links ein Paar. Eine ungerade letzte Spalte bleibt ein Einzelplatz. Klicke auf einen Platz, um ihn zu sperren oder wieder zu aktivieren. Oben ist die Tafel.</p>
+        <p id="roomLayoutHint" class="hint">Bei Doppeltischen bilden jeweils zwei Plätze von links ein Paar. Eine ungerade letzte Spalte bleibt ein Einzelplatz. Klicke auf einen Platz, um ihn zu sperren oder wieder zu aktivieren. Oben ist die Tafel.</p>
       </section>
 
       <section class="card">
@@ -81,7 +103,7 @@
         <label class="check-row"><input id="groupCategories" type="checkbox" /> Gleiche Kategorien möglichst nebeneinander</label>
         <p class="hint category-principle-hint">Die beiden Kategorie-Prinzipien schließen sich gegenseitig aus.</p>
         <label class="check-row"><input id="everyoneHasNeighbor" type="checkbox" /> Möglichst jeder soll einen direkten Nachbarn haben</label>
-        <p class="hint">Bei Doppeltischen zählt nur der Partner am selben Tisch, bei Einzelplätzen der direkt belegte Platz links oder rechts. Schüler mit der Muss-Regel „alleine sitzen“ sind ausgenommen.</p>
+        <p class="hint">Bei Gruppentischen zählen die direkt benachbarten Stühle am selben Tisch, bei Doppeltischen der Partner am selben Tisch und bei Einzelplätzen der direkt belegte Platz links oder rechts. Schüler mit der Muss-Regel „alleine sitzen“ sind ausgenommen.</p>
         <label class="check-row"><input id="fillFrontFirst" type="checkbox" /> Freie Plätze möglichst von vorne nach hinten füllen</label>
         <label class="check-row"><input id="avoidEmptyGaps" type="checkbox" checked /> Einzelne Lücken in Reihen vermeiden</label>
       </section>

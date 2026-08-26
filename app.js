@@ -7,6 +7,9 @@ const state = {
   rows: 5,
   cols: 6,
   seatLayout: 'single',
+  groupTableCount: 6,
+  groupSeatsPerTable: 4,
+  groupTableRotations: {},
   activeSeats: new Set(),
   students: [],
   rules: [],
@@ -23,6 +26,15 @@ const els = {
   rowsInput: document.querySelector('#rowsInput'),
   colsInput: document.querySelector('#colsInput'),
   seatLayoutInput: document.querySelector('#seatLayoutInput'),
+  standardRoomSettings: document.querySelector('#standardRoomSettings'),
+  groupRoomSettings: document.querySelector('#groupRoomSettings'),
+  groupTableCountInput: document.querySelector('#groupTableCountInput'),
+  groupSeatsPerTableInput: document.querySelector('#groupSeatsPerTableInput'),
+  groupRotationControls: document.querySelector('#groupRotationControls'),
+  groupRotationTable: document.querySelector('#groupRotationTable'),
+  groupRotationAngle: document.querySelector('#groupRotationAngle'),
+  applyGroupRotationBtn: document.querySelector('#applyGroupRotationBtn'),
+  roomLayoutHint: document.querySelector('#roomLayoutHint'),
   buildRoomBtn: document.querySelector('#buildRoomBtn'),
   roomGrid: document.querySelector('#roomGrid'),
   seatTemplate: document.querySelector('#seatTemplate'),
@@ -76,10 +88,54 @@ function parseSeatKey(key) {
 function uid() { return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`; }
 function studentById(id) { return state.students.find(s => s.id === id); }
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+function isGroupLayout() { return state.seatLayout === 'group'; }
+function groupTableColumns() { return Math.max(1, Math.min(4, Math.ceil(Math.sqrt(state.groupTableCount || 1)))); }
+function groupTableRows() { return Math.max(1, Math.ceil((state.groupTableCount || 1) / groupTableColumns())); }
+function groupTableGridPosition(tableIndex) {
+  const columns = groupTableColumns();
+  return { row: Math.floor(tableIndex / columns), col: tableIndex % columns };
+}
+function groupRotation(tableIndex) { return Number(state.groupTableRotations?.[tableIndex] || 0); }
 
 function seatDisplayName(key) {
   const { row, col } = parseSeatKey(key);
-  return `Reihe ${row + 1}, Platz ${col + 1}`;
+  return isGroupLayout() ? `Tisch ${row + 1}, Platz ${col + 1}` : `Reihe ${row + 1}, Platz ${col + 1}`;
+}
+
+function updateRoomSettingsVisibility() {
+  const group = els.seatLayoutInput.value === 'group';
+  els.standardRoomSettings.classList.toggle('hidden', group);
+  els.groupRoomSettings.classList.toggle('hidden', !group);
+  if (els.avoidEmptyGaps) {
+    els.avoidEmptyGaps.disabled = group;
+    els.avoidEmptyGaps.title = group ? 'Dieses Reihen-Prinzip wird bei Gruppentischen nicht benötigt.' : '';
+  }
+  if (els.roomLayoutHint) {
+    els.roomLayoutHint.textContent = group
+      ? 'Die Gruppentische werden automatisch im Raum verteilt. Sitzplätze können einzeln gesperrt werden. Über „Tisch ausrichten“ lässt sich jeder Gruppentisch schräg stellen; die Drehung ist nur für die Raumdarstellung. Oben ist die Tafel.'
+      : (els.seatLayoutInput.value === 'double'
+        ? 'Bei Doppeltischen bilden jeweils zwei Plätze von links ein Paar. Eine ungerade letzte Spalte bleibt ein Einzelplatz. Klicke auf einen Platz, um ihn zu sperren oder wieder zu aktivieren. Oben ist die Tafel.'
+        : 'Klicke auf einen Platz, um ihn zu sperren oder wieder zu aktivieren. Oben ist die Tafel.');
+  }
+}
+
+function updateGroupRotationControls() {
+  if (!els.groupRotationTable) return;
+  const count = clamp(Number(els.groupTableCountInput?.value) || state.groupTableCount || 1, 1, 16);
+  const previous = Number(els.groupRotationTable.value || 0);
+  els.groupRotationTable.innerHTML = Array.from({ length: count }, (_, i) => `<option value="${i}">Tisch ${i + 1}</option>`).join('');
+  els.groupRotationTable.value = String(Math.min(previous, count - 1));
+  const tableIndex = Number(els.groupRotationTable.value || 0);
+  els.groupRotationAngle.value = String(groupRotation(tableIndex));
+}
+
+function applyGroupRotation() {
+  if (!isGroupLayout()) return;
+  const tableIndex = Number(els.groupRotationTable.value || 0);
+  const angle = Number(els.groupRotationAngle.value || 0);
+  state.groupTableRotations[tableIndex] = angle;
+  renderRoom();
+  saveLocal();
 }
 
 function fixedSeatRules() { return state.rules.filter(rule => rule.type === 'fixedSeat'); }
@@ -164,10 +220,23 @@ function formattedDate() {
 }
 
 function initRoom(rows = state.rows, cols = state.cols, keepBlocked = false) {
-  state.seatLayout = els.seatLayoutInput?.value === 'double' ? 'double' : 'single';
+  const selectedLayout = ['single', 'double', 'group'].includes(els.seatLayoutInput?.value) ? els.seatLayoutInput.value : 'single';
+  state.seatLayout = selectedLayout;
   const oldActive = new Set(state.activeSeats);
-  state.rows = clamp(Number(rows) || 5, 1, 12);
-  state.cols = clamp(Number(cols) || 6, 1, 12);
+
+  if (isGroupLayout()) {
+    state.groupTableCount = clamp(Number(els.groupTableCountInput?.value) || state.groupTableCount || 6, 1, 16);
+    state.groupSeatsPerTable = clamp(Number(els.groupSeatsPerTableInput?.value) || state.groupSeatsPerTable || 4, 2, 10);
+    state.rows = state.groupTableCount;
+    state.cols = state.groupSeatsPerTable;
+    const nextRotations = {};
+    for (let i = 0; i < state.groupTableCount; i++) nextRotations[i] = Number(state.groupTableRotations?.[i] || 0);
+    state.groupTableRotations = nextRotations;
+  } else {
+    state.rows = clamp(Number(rows) || 5, 1, 12);
+    state.cols = clamp(Number(cols) || 6, 1, 12);
+  }
+
   state.activeSeats.clear();
   for (let r = 0; r < state.rows; r++) {
     for (let c = 0; c < state.cols; c++) {
@@ -177,12 +246,90 @@ function initRoom(rows = state.rows, cols = state.cols, keepBlocked = false) {
   }
   state.assignment.clear();
   state.rules = state.rules.filter(rule => rule.type !== 'fixedSeat' || state.activeSeats.has(rule.seat));
+  updateRoomSettingsVisibility();
+  updateGroupRotationControls();
   renderRules();
   updateSeatOptions();
   renderRoom();
 }
 
+function configureInteractiveSeat(node, key, label) {
+  const { row, col } = parseSeatKey(key);
+  node.dataset.key = key;
+  node.dataset.col = String(col);
+  node.querySelector('.seat-number').textContent = label;
+  const active = state.activeSeats.has(key);
+  node.classList.toggle('blocked', !active);
+  node.setAttribute('aria-pressed', String(!active));
+
+  const fixedStudentId = fixedStudentForSeat(key);
+  const studentId = state.assignment.get(key);
+  const student = studentById(studentId);
+  if (fixedStudentId && active) {
+    node.classList.add('fixed-seat');
+    node.title = `Fest zugewiesen: ${studentById(fixedStudentId)?.name || 'Schüler'}`;
+    node.querySelector('.seat-number').textContent = `📌 ${label}`;
+  }
+  if (student && active) {
+    node.classList.add('assigned');
+    node.querySelector('.seat-name').textContent = student.name;
+    node.querySelector('.seat-category').textContent = student.category || '';
+    node.draggable = !isFixedStudent(student.id);
+    node.classList.toggle('fixed-occupant', isFixedStudent(student.id));
+  } else {
+    node.querySelector('.seat-name').textContent = active ? 'Freier Platz' : 'Gesperrt';
+    node.querySelector('.seat-category').textContent = '';
+  }
+
+  node.addEventListener('click', () => toggleSeat(key));
+  node.addEventListener('dragstart', onDragStart);
+  node.addEventListener('dragover', onDragOver);
+  node.addEventListener('dragleave', onDragLeave);
+  node.addEventListener('drop', onDrop);
+  return node;
+}
+
+function renderGroupRoom() {
+  els.roomGrid.className = 'room-grid group-layout';
+  els.roomGrid.style.gridTemplateColumns = `repeat(${groupTableColumns()}, minmax(250px, 1fr))`;
+  els.roomGrid.innerHTML = '';
+
+  for (let tableIndex = 0; tableIndex < state.groupTableCount; tableIndex++) {
+    const card = document.createElement('div');
+    card.className = 'group-table-card';
+    if (state.groupSeatsPerTable >= 7) card.classList.add('dense');
+    if (state.groupSeatsPerTable >= 9) card.classList.add('very-dense');
+    const stage = document.createElement('div');
+    stage.className = 'group-table-stage';
+    const surface = document.createElement('div');
+    surface.className = 'group-table-surface';
+    surface.style.transform = `translate(-50%, -50%) rotate(${groupRotation(tableIndex)}deg)`;
+    surface.innerHTML = `<strong>Tisch ${tableIndex + 1}</strong><small>${state.groupSeatsPerTable} Plätze</small>`;
+    stage.appendChild(surface);
+
+    for (let seatIndex = 0; seatIndex < state.groupSeatsPerTable; seatIndex++) {
+      const key = seatKey(tableIndex, seatIndex);
+      const node = els.seatTemplate.content.firstElementChild.cloneNode(true);
+      node.classList.add('group-seat');
+      configureInteractiveSeat(node, key, `T${tableIndex + 1} · P${seatIndex + 1}`);
+      const angle = ((-90 + groupRotation(tableIndex) + (seatIndex * 360 / state.groupSeatsPerTable)) * Math.PI) / 180;
+      const x = 50 + Math.cos(angle) * 36;
+      const y = 50 + Math.sin(angle) * 35;
+      node.style.left = `${x}%`;
+      node.style.top = `${y}%`;
+      stage.appendChild(node);
+    }
+    card.appendChild(stage);
+    els.roomGrid.appendChild(card);
+  }
+}
+
 function renderRoom() {
+  if (isGroupLayout()) {
+    renderGroupRoom();
+    return;
+  }
+  els.roomGrid.className = 'room-grid';
   els.roomGrid.style.gridTemplateColumns = `repeat(${state.cols}, minmax(74px, 1fr))`;
   els.roomGrid.classList.toggle('double-layout', state.seatLayout === 'double');
   els.roomGrid.innerHTML = '';
@@ -191,43 +338,12 @@ function renderRoom() {
     for (let c = 0; c < state.cols; c++) {
       const key = seatKey(r, c);
       const node = els.seatTemplate.content.firstElementChild.cloneNode(true);
-      node.dataset.key = key;
-      node.dataset.col = String(c);
       applyDeskClasses(node, c, false);
-      node.querySelector('.seat-number').textContent = `R${r + 1} · P${c + 1}`;
-      const active = state.activeSeats.has(key);
-      node.classList.toggle('blocked', !active);
-      node.setAttribute('aria-pressed', String(!active));
-
-      const fixedStudentId = fixedStudentForSeat(key);
-      const studentId = state.assignment.get(key);
-      const student = studentById(studentId);
-      if (fixedStudentId && active) {
-        node.classList.add('fixed-seat');
-        node.title = `Fest zugewiesen: ${studentById(fixedStudentId)?.name || 'Schüler'}`;
-        node.querySelector('.seat-number').textContent = `📌 R${r + 1} · P${c + 1}`;
-      }
-      if (student && active) {
-        node.classList.add('assigned');
-        node.querySelector('.seat-name').textContent = student.name;
-        node.querySelector('.seat-category').textContent = student.category || '';
-        node.draggable = !isFixedStudent(student.id);
-        node.classList.toggle('fixed-occupant', isFixedStudent(student.id));
-      } else {
-        node.querySelector('.seat-name').textContent = active ? 'Freier Platz' : 'Gesperrt';
-        node.querySelector('.seat-category').textContent = '';
-      }
-
-      node.addEventListener('click', () => toggleSeat(key));
-      node.addEventListener('dragstart', onDragStart);
-      node.addEventListener('dragover', onDragOver);
-      node.addEventListener('dragleave', onDragLeave);
-      node.addEventListener('drop', onDrop);
+      configureInteractiveSeat(node, key, `R${r + 1} · P${c + 1}`);
       els.roomGrid.appendChild(node);
     }
   }
 }
-
 function toggleSeat(key) {
   const fixedRule = fixedSeatRules().find(rule => rule.seat === key);
   let fixedRemovalConfirmed = false;
@@ -434,7 +550,34 @@ function coordsForStudent(assignment) {
   return map;
 }
 function manhattan(a, b) { return Math.abs(a.row - b.row) + Math.abs(a.col - b.col); }
+function roomPosition(pos) {
+  if (!isGroupLayout()) return { row: pos.row, col: pos.col };
+  const table = groupTableGridPosition(pos.row);
+  const angle = ((-90 + (pos.col * 360 / state.groupSeatsPerTable)) * Math.PI) / 180;
+  return {
+    row: table.row * 4 + Math.sin(angle),
+    col: table.col * 4 + Math.cos(angle),
+  };
+}
+function seatDistance(a, b) {
+  const pa = roomPosition(a), pb = roomPosition(b);
+  return Math.abs(pa.row - pb.row) + Math.abs(pa.col - pb.col);
+}
+function maxSeatDistance() {
+  const seats = activeSeatKeys().map(parseSeatKey);
+  let max = 1;
+  for (let i = 0; i < seats.length; i++) {
+    for (let j = i + 1; j < seats.length; j++) max = Math.max(max, seatDistance(seats[i], seats[j]));
+  }
+  return max;
+}
 function isHorizontalNeighbor(a, b) {
+  if (isGroupLayout()) {
+    if (a.row !== b.row) return false;
+    const n = state.groupSeatsPerTable;
+    const diff = Math.abs(a.col - b.col);
+    return diff === 1 || diff === n - 1;
+  }
   if (a.row !== b.row || Math.abs(a.col - b.col) !== 1) return false;
   if (state.seatLayout === 'double') return Math.floor(a.col / 2) === Math.floor(b.col / 2);
   return true;
@@ -446,6 +589,12 @@ function occupiedStudentAt(assignment, row, col) {
   return assignment.get(key) || null;
 }
 function sitsAlone(assignment, pos) {
+  if (isGroupLayout()) {
+    for (let c = 0; c < state.groupSeatsPerTable; c++) {
+      if (c !== pos.col && occupiedStudentAt(assignment, pos.row, c)) return false;
+    }
+    return true;
+  }
   if (state.seatLayout === 'double') {
     const partnerCol = pos.col % 2 === 0 ? pos.col + 1 : pos.col - 1;
     return !occupiedStudentAt(assignment, pos.row, partnerCol);
@@ -453,8 +602,20 @@ function sitsAlone(assignment, pos) {
   return !occupiedStudentAt(assignment, pos.row, pos.col - 1)
     && !occupiedStudentAt(assignment, pos.row, pos.col + 1);
 }
-function isFront(pos) { return pos.row < Math.max(1, Math.ceil(state.rows / 3)); }
-function isBack(pos) { return pos.row >= Math.floor((state.rows * 2) / 3); }
+function isFront(pos) {
+  if (isGroupLayout()) {
+    const tablePos = groupTableGridPosition(pos.row);
+    return tablePos.row < Math.max(1, Math.ceil(groupTableRows() / 3));
+  }
+  return pos.row < Math.max(1, Math.ceil(state.rows / 3));
+}
+function isBack(pos) {
+  if (isGroupLayout()) {
+    const tablePos = groupTableGridPosition(pos.row);
+    return tablePos.row >= Math.floor((groupTableRows() * 2) / 3);
+  }
+  return pos.row >= Math.floor((state.rows * 2) / 3);
+}
 
 function evaluateAssignment(assignment) {
   const positions = coordsForStudent(assignment);
@@ -474,13 +635,13 @@ function evaluateAssignment(assignment) {
     if (rule.type === 'together') satisfied = isHorizontalNeighbor(aPos, bPos);
     if (rule.type === 'notAdjacent') satisfied = !isHorizontalNeighbor(aPos, bPos);
     if (rule.type === 'notNear') {
-      const d = manhattan(aPos, bPos);
+      const d = seatDistance(aPos, bPos);
       satisfied = d >= rule.distance;
       penalty = Math.max(0, rule.distance - d) * 8;
     }
     if (rule.type === 'far') {
-      const maxDistance = Math.max(1, (state.rows - 1) + (state.cols - 1));
-      const d = manhattan(aPos, bPos);
+      const maxDistance = maxSeatDistance();
+      const d = seatDistance(aPos, bPos);
       penalty = (maxDistance - d) * 2;
       satisfied = d >= Math.ceil(maxDistance * 0.65);
     }
@@ -546,7 +707,7 @@ function evaluateAssignment(assignment) {
     softPossible += Math.max(1, occupied.length);
     softPenalty += occupied.filter(item => item.pos.row > Math.ceil(deepest * .7)).length * .4;
   }
-  if (els.avoidEmptyGaps.checked) {
+  if (els.avoidEmptyGaps.checked && !isGroupLayout()) {
     for (let r = 0; r < state.rows; r++) {
       const occupiedCols = occupied.filter(i => i.pos.row === r).map(i => i.pos.col).sort((a,b) => a-b);
       for (let i = 1; i < occupiedCols.length; i++) {
@@ -721,11 +882,14 @@ function clearLocalProject() {
 function serializeState() {
   readMetadataFromInputs();
   return {
-    version: 6,
+    version: 7,
     metadata: { ...state.metadata },
     rows: state.rows,
     cols: state.cols,
     seatLayout: state.seatLayout,
+    groupTableCount: state.groupTableCount,
+    groupSeatsPerTable: state.groupSeatsPerTable,
+    groupTableRotations: { ...state.groupTableRotations },
     activeSeats: [...state.activeSeats],
     studentsText: els.studentsInput.value,
     students: state.students,
@@ -742,7 +906,7 @@ function serializeState() {
 }
 
 function restoreState(data) {
-  if (!data || ![1, 2, 3, 4, 5, 6].includes(data.version)) throw new Error('Unbekanntes Dateiformat.');
+  if (!data || ![1, 2, 3, 4, 5, 6, 7].includes(data.version)) throw new Error('Unbekanntes Dateiformat.');
   state.metadata = {
     className: data.metadata?.className || '',
     roomName: data.metadata?.roomName || '',
@@ -750,7 +914,11 @@ function restoreState(data) {
   };
   state.rows = clamp(Number(data.rows) || 5, 1, 12);
   state.cols = clamp(Number(data.cols) || 6, 1, 12);
-  state.seatLayout = data.seatLayout === 'double' ? 'double' : 'single';
+  state.seatLayout = ['single', 'double', 'group'].includes(data.seatLayout) ? data.seatLayout : 'single';
+  state.groupTableCount = clamp(Number(data.groupTableCount) || (state.seatLayout === 'group' ? Number(data.rows) : 6) || 6, 1, 16);
+  state.groupSeatsPerTable = clamp(Number(data.groupSeatsPerTable) || (state.seatLayout === 'group' ? Number(data.cols) : 4) || 4, 2, 10);
+  state.groupTableRotations = data.groupTableRotations && typeof data.groupTableRotations === 'object' ? { ...data.groupTableRotations } : {};
+  if (state.seatLayout === 'group') { state.rows = state.groupTableCount; state.cols = state.groupSeatsPerTable; }
   state.activeSeats = new Set(Array.isArray(data.activeSeats) ? data.activeSeats : []);
   state.students = Array.isArray(data.students) ? data.students : [];
   state.rules = Array.isArray(data.rules) ? data.rules : [];
@@ -761,6 +929,10 @@ function restoreState(data) {
   els.rowsInput.value = state.rows;
   els.colsInput.value = state.cols;
   els.seatLayoutInput.value = state.seatLayout;
+  els.groupTableCountInput.value = state.groupTableCount;
+  els.groupSeatsPerTableInput.value = state.groupSeatsPerTable;
+  updateRoomSettingsVisibility();
+  updateGroupRotationControls();
   els.studentsInput.value = data.studentsText || state.students.map(s => `${s.name}${s.category ? `;${s.category}` : ''}`).join('\n');
   els.mixCategories.checked = data.options?.mixCategories ?? true;
   els.groupCategories.checked = data.options?.groupCategories ?? false;
@@ -779,12 +951,63 @@ function restoreState(data) {
 }
 
 
+function renderGroupPrintGrid(container, compact = false, teacherView = true) {
+  container.innerHTML = '';
+  container.classList.add('group-print-layout');
+  const columns = groupTableColumns();
+  const rows = groupTableRows();
+  container.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+  container.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
+
+  for (let tableIndex = 0; tableIndex < state.groupTableCount; tableIndex++) {
+    const original = groupTableGridPosition(tableIndex);
+    const visualRow = teacherView ? rows - original.row : original.row + 1;
+    const visualCol = teacherView ? columns - original.col : original.col + 1;
+    const card = document.createElement('div');
+    card.className = compact ? 'classbook-group-table' : 'print-group-table';
+    card.style.gridRow = String(visualRow);
+    card.style.gridColumn = String(visualCol);
+
+    const stage = document.createElement('div');
+    stage.className = 'print-group-stage';
+    const surface = document.createElement('div');
+    surface.className = 'print-group-surface';
+    const viewOffset = teacherView ? 180 : 0;
+    surface.style.transform = `translate(-50%, -50%) rotate(${groupRotation(tableIndex) + viewOffset}deg)`;
+    surface.textContent = `Tisch ${tableIndex + 1}`;
+    stage.appendChild(surface);
+
+    for (let seatIndex = 0; seatIndex < state.groupSeatsPerTable; seatIndex++) {
+      const key = seatKey(tableIndex, seatIndex);
+      const active = state.activeSeats.has(key);
+      const student = studentById(state.assignment.get(key));
+      const seat = document.createElement('div');
+      seat.className = compact ? 'classbook-group-seat' : 'print-group-seat';
+      seat.classList.toggle('blocked', !active);
+      seat.classList.toggle('assigned', Boolean(active && student));
+      const angle = ((-90 + groupRotation(tableIndex) + viewOffset + (seatIndex * 360 / state.groupSeatsPerTable)) * Math.PI) / 180;
+      seat.style.left = `${50 + Math.cos(angle) * 36}%`;
+      seat.style.top = `${50 + Math.sin(angle) * 35}%`;
+      seat.textContent = !active ? '—' : (student ? `${isFixedSeat(key) ? '📌 ' : ''}${student.name}` : '');
+      stage.appendChild(seat);
+    }
+    card.appendChild(stage);
+    container.appendChild(card);
+  }
+}
+
 function renderTeacherPrintView() {
-  els.teacherRoomGrid.style.gridTemplateColumns = `repeat(${state.cols}, minmax(72px, 1fr))`;
+  els.teacherRoomGrid.classList.remove('group-print-layout');
+  els.teacherRoomGrid.style.gridTemplateRows = '';
   els.teacherRoomGrid.innerHTML = '';
   readMetadataFromInputs();
   els.teacherPrintDate.textContent = formattedDate();
   els.teacherPrintMeta.textContent = metadataParts().join(' · ') || 'Ohne Projektangaben';
+  if (isGroupLayout()) {
+    renderGroupPrintGrid(els.teacherRoomGrid, false, true);
+    return;
+  }
+  els.teacherRoomGrid.style.gridTemplateColumns = `repeat(${state.cols}, minmax(72px, 1fr))`;
 
   // 180° gedrehte Sitzanordnung: erste Reihe unten und links/rechts aus Lehrersicht.
   for (let r = state.rows - 1; r >= 0; r--) {
@@ -822,9 +1045,14 @@ function renderClassbookPrintView() {
   els.classbookRoom.textContent = state.metadata.roomName || '–';
   els.classbookSubject.textContent = state.metadata.subject || '–';
   els.classbookDate.textContent = formattedDate();
+  els.classbookRoomGrid.classList.remove('group-print-layout');
+  els.classbookRoomGrid.innerHTML = '';
+  if (isGroupLayout()) {
+    renderGroupPrintGrid(els.classbookRoomGrid, true, true);
+    return;
+  }
   els.classbookRoomGrid.style.gridTemplateColumns = `repeat(${state.cols}, minmax(0, 1fr))`;
   els.classbookRoomGrid.style.gridTemplateRows = `repeat(${state.rows}, minmax(0, 1fr))`;
-  els.classbookRoomGrid.innerHTML = '';
 
   // Kompakt und aus Lehrerperspektive: 180° gedreht.
   for (let r = state.rows - 1; r >= 0; r--) {
@@ -909,6 +1137,10 @@ els.buildRoomBtn.addEventListener('click', () => {
   initRoom(els.rowsInput.value, els.colsInput.value);
   saveLocal();
 });
+els.groupRotationTable.addEventListener('change', () => {
+  els.groupRotationAngle.value = String(groupRotation(Number(els.groupRotationTable.value || 0)));
+});
+els.applyGroupRotationBtn.addEventListener('click', applyGroupRotation);
 els.applyStudentsBtn.addEventListener('click', () => { applyStudents(); saveLocal(); });
 els.ruleType.addEventListener('change', updateRuleFormVisibility);
 els.addRuleBtn.addEventListener('click', addRule);
@@ -939,15 +1171,18 @@ els.groupCategories.addEventListener('change', () => {
   saveLocal();
 });
 els.seatLayoutInput.addEventListener('change', () => {
-  const nextLayout = els.seatLayoutInput.value === 'double' ? 'double' : 'single';
-  if (state.assignment.size && nextLayout !== state.seatLayout) {
+  const nextLayout = ['single', 'double', 'group'].includes(els.seatLayoutInput.value) ? els.seatLayoutInput.value : 'single';
+  const changed = nextLayout !== state.seatLayout;
+  if (state.assignment.size && changed) {
     state.assignment.clear();
     clearResults();
   }
   state.seatLayout = nextLayout;
-  renderRoom();
+  updateRoomSettingsVisibility();
+  initRoom(els.rowsInput.value, els.colsInput.value);
   saveLocal();
 });
+els.groupTableCountInput.addEventListener('input', updateGroupRotationControls);
 [els.everyoneHasNeighbor, els.fillFrontFirst, els.avoidEmptyGaps].forEach(el => el.addEventListener('change', saveLocal));
 [els.classNameInput, els.roomNameInput, els.subjectInput].forEach(el => {
   el.addEventListener('input', () => { readMetadataFromInputs(); saveLocal(); });
@@ -959,6 +1194,7 @@ window.addEventListener('beforeunload', saveLocal);
   if (saved) {
     try { restoreState(JSON.parse(saved)); return; } catch { /* fall through */ }
   }
+  updateRoomSettingsVisibility();
   initRoom(5, 6);
   renderMetadata();
   updateStudentUI();

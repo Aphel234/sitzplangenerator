@@ -105,6 +105,76 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(49,87,213,.1
 .seat-name { align-self: center; font-size: .93rem; overflow-wrap: anywhere; }
 .seat-category { color: var(--primary); font-weight: 750; }
 
+
+.group-rotation-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.group-rotation-controls button { grid-column: 1 / -1; }
+
+.room-grid.group-layout {
+  gap: 24px;
+  min-width: 820px;
+  align-items: stretch;
+}
+.group-table-card {
+  min-width: 250px;
+  border: 1px solid #dbe2ea;
+  border-radius: 18px;
+  background: #fbfcfe;
+  padding: 8px;
+  overflow: visible;
+}
+.group-table-stage {
+  position: relative;
+  height: 260px;
+  min-width: 240px;
+}
+.group-table-surface {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 43%;
+  height: 34%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 3px;
+  border: 2px solid #687a91;
+  border-radius: 10px;
+  background: #e7edf5;
+  box-shadow: 0 8px 18px rgba(18,33,64,.08);
+  transform-origin: center;
+  z-index: 1;
+  text-align: center;
+}
+.group-table-surface strong { font-size: .82rem; }
+.group-table-surface small { font-size: .68rem; color: var(--muted); }
+.seat.group-seat {
+  position: absolute;
+  z-index: 2;
+  width: 94px;
+  min-height: 62px;
+  padding: 6px;
+  transform: translate(-50%, -50%);
+  grid-template-rows: auto 1fr auto;
+  box-shadow: 0 3px 10px rgba(18,33,64,.07);
+}
+.seat.group-seat:hover { transform: translate(-50%, calc(-50% - 1px)); }
+.seat.group-seat .seat-number { font-size: .58rem; }
+.seat.group-seat .seat-name { font-size: .78rem; text-align: center; }
+.seat.group-seat .seat-category { font-size: .65rem; text-align: center; }
+.group-table-card.dense .seat.group-seat { width: 82px; min-height: 58px; }
+.group-table-card.dense .seat.group-seat .seat-name { font-size: .72rem; }
+.group-table-card.very-dense .seat.group-seat { width: 72px; min-height: 54px; padding: 4px; }
+.group-table-card.very-dense .seat.group-seat .seat-name { font-size: .66rem; }
+
 .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 .result-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .score-badge { display: inline-grid; place-items: center; min-width: 64px; padding: 8px 10px; border-radius: 999px; font-weight: 850; }
@@ -126,6 +196,8 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(49,87,213,.1
   .layout { padding: 14px; }
   .results-grid { grid-template-columns: 1fr; }
   .form-grid.two { grid-template-columns: 1fr; }
+  .group-rotation-controls { grid-template-columns: 1fr; }
+  .group-rotation-controls button { grid-column: auto; }
 }
 
 @page room { size: landscape; margin: 12mm; }
@@ -216,6 +288,84 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(49,87,213,.1
   .print-seat-number { font-size: 6.5pt; color: #666; }
   .print-seat-name { align-self: center; font-size: 9pt; overflow-wrap: anywhere; }
   .print-seat-category { font-size: 7pt; font-weight: 700; }
+
+  .teacher-room-grid.group-print-layout,
+  .classbook-room-grid.group-print-layout {
+    display: grid;
+    width: 100%;
+    min-height: 0;
+  }
+
+  .print-group-table,
+  .classbook-group-table {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    break-inside: avoid;
+  }
+
+  .print-group-table { min-height: 36mm; }
+  .print-group-stage { position: relative; width: 100%; height: 100%; min-height: inherit; }
+  .print-group-surface {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 42%;
+    height: 34%;
+    display: grid;
+    place-items: center;
+    border: 1px solid #333;
+    border-radius: 1.5mm;
+    background: #eee !important;
+    font-size: 7pt;
+    font-weight: 800;
+    transform-origin: center;
+  }
+  .print-group-seat,
+  .classbook-group-seat {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: grid;
+    place-items: center;
+    text-align: center;
+    overflow: hidden;
+    background: white !important;
+    border: .7px solid #555;
+    border-radius: 1mm;
+    overflow-wrap: anywhere;
+  }
+  .print-group-seat {
+    width: 29%;
+    min-height: 9mm;
+    padding: .8mm;
+    font-size: 6.6pt;
+    line-height: 1.05;
+  }
+  .print-group-seat.assigned { border: 1px solid #111; font-weight: 700; }
+  .print-group-seat.blocked,
+  .classbook-group-seat.blocked { border-style: dashed; background: #eee !important; color: #888; }
+
+  body:not(.print-teacher):not(.print-classbook) .room-grid.group-layout {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    min-width: 0;
+    gap: 3mm;
+  }
+  body:not(.print-teacher):not(.print-classbook) .group-table-card {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+  body:not(.print-teacher):not(.print-classbook) .group-table-stage { height: 40mm; min-width: 0; }
+  body:not(.print-teacher):not(.print-classbook) .seat.group-seat {
+    width: 29%;
+    min-height: 9mm;
+    padding: .8mm;
+    font-size: 6.5pt;
+    box-shadow: none;
+  }
+  body:not(.print-teacher):not(.print-classbook) .seat.group-seat .seat-number { font-size: 5pt; }
+  body:not(.print-teacher):not(.print-classbook) .seat.group-seat .seat-name { font-size: 6.5pt; }
+  body:not(.print-teacher):not(.print-classbook) .seat.group-seat .seat-category { font-size: 5pt; }
 
   body.print-classbook {
     margin: 0 !important;
@@ -321,6 +471,24 @@ input:focus, textarea:focus, select:focus { outline: 3px solid rgba(49,87,213,.1
   .classbook-seat.double-seat.desk-right { border-radius: .3mm 1mm 1mm .3mm; }
   .classbook-seat.assigned { border: 1px solid #111; }
   .classbook-seat.blocked { border-style: dashed; background: #eee !important; color: #888; }
+
+  .classbook-room-grid.group-print-layout { gap: 1mm; }
+  .classbook-group-table { min-height: 0; overflow: visible; }
+  .classbook-group-table .print-group-stage { min-height: 0; }
+  .classbook-group-table .print-group-surface {
+    width: 40%;
+    height: 32%;
+    border-radius: .8mm;
+    font-size: 5pt;
+  }
+  .classbook-group-seat {
+    width: 31%;
+    min-height: 4.8mm;
+    padding: .25mm;
+    font-size: 4.8pt;
+    line-height: 1;
+  }
+  .classbook-group-seat.assigned { border-color: #111; font-weight: 700; }
 
   .classbook-cut-note {
     margin: 2mm 0 0;
