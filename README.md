@@ -47,6 +47,7 @@ Unter **Regeln** lässt sich „muss auf einem festen Platz sitzen“ auswählen
 - **Klassenbuch drucken:** A4-Hochformat mit einem kompakten Sitzplanfeld von etwa 125 mm Höhe, also etwas weniger als einer halben A4-Seite. Die Darstellung nutzt ebenfalls die Lehrerperspektive und enthält Klasse, Raum, Fach und Datum.
 
 Alle Druckansichten können im Druckdialog des Browsers auch als PDF gespeichert werden.
+- **Hospitantenansicht als PNG:** Exportiert eine Bilddatei für Unterrichtsentwürfe oder Hospitationsunterlagen. Die Ansicht zeigt die Klasse aus Sicht des Hospitanten in Richtung Tafel und eignet sich gut zum Einfügen in Word-, LibreOffice- oder PDF-Dokumente.
 
 ## Grundprinzipien
 

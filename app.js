@@ -68,6 +68,7 @@ const els = {
   printBtn: document.querySelector('#printBtn'),
   teacherPrintBtn: document.querySelector('#teacherPrintBtn'),
   classbookPrintBtn: document.querySelector('#classbookPrintBtn'),
+  hospitantExportBtn: document.querySelector('#hospitantExportBtn'),
   teacherPrintView: document.querySelector('#teacherPrintView'),
   teacherRoomGrid: document.querySelector('#teacherRoomGrid'),
   teacherPrintDate: document.querySelector('#teacherPrintDate'),
@@ -882,7 +883,7 @@ function clearLocalProject() {
 function serializeState() {
   readMetadataFromInputs();
   return {
-    version: 7,
+    version: 8,
     metadata: { ...state.metadata },
     rows: state.rows,
     cols: state.cols,
@@ -906,7 +907,7 @@ function serializeState() {
 }
 
 function restoreState(data) {
-  if (!data || ![1, 2, 3, 4, 5, 6, 7].includes(data.version)) throw new Error('Unbekanntes Dateiformat.');
+  if (!data || ![1, 2, 3, 4, 5, 6, 7, 8].includes(data.version)) throw new Error('Unbekanntes Dateiformat.');
   state.metadata = {
     className: data.metadata?.className || '',
     roomName: data.metadata?.roomName || '',
@@ -1074,6 +1075,243 @@ function renderClassbookPrintView() {
   }
 }
 
+
+function createExportCanvas(width, height) {
+  const scale = Math.max(2, Math.ceil(window.devicePixelRatio || 1));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.textBaseline = 'alphabetic';
+  return { canvas, ctx, width, height };
+}
+
+function drawRoundRect(ctx, x, y, width, height, radius = 12, fill = '#fff', stroke = '#b9c5d4', lineWidth = 1.5) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) {
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = stroke;
+    ctx.stroke();
+  }
+}
+
+function drawCenteredLabel(ctx, x, y, width, height, text, fill = '#1d2939', textColor = '#ffffff') {
+  drawRoundRect(ctx, x, y, width, height, 10, fill, fill, 1);
+  ctx.fillStyle = textColor;
+  ctx.font = '700 16px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, x + width / 2, y + height / 2 + 5);
+}
+
+function fitLines(ctx, text, maxWidth, maxLines = 2) {
+  const words = String(text || '').split(/\s+/).filter(Boolean);
+  if (!words.length) return [''];
+  const lines = [];
+  let current = words[0];
+  for (let i = 1; i < words.length; i++) {
+    const test = current + ' ' + words[i];
+    if (ctx.measureText(test).width <= maxWidth || current === '') current = test;
+    else {
+      lines.push(current);
+      current = words[i];
+      if (lines.length === maxLines - 1) break;
+    }
+  }
+  if (lines.length < maxLines) {
+    const remaining = words.slice(lines.join(' ').split(/\s+/).filter(Boolean).length);
+    const restText = remaining.join(' ') || current;
+    lines.push(restText);
+  }
+  return lines.slice(0, maxLines).map((line, index, arr) => {
+    if (index !== arr.length - 1) return line;
+    let output = line;
+    while (ctx.measureText(output).width > maxWidth && output.length > 2) output = output.slice(0, -2).trimEnd() + '…';
+    return output;
+  });
+}
+
+function drawSeatBox(ctx, options) {
+  const { x, y, width, height, label, name, category, blocked, assigned, fixed } = options;
+  const fill = blocked ? '#eef1f5' : assigned ? '#eef3ff' : '#ffffff';
+  const stroke = fixed ? '#c99700' : assigned ? '#8ea5ee' : blocked ? '#aeb7c2' : '#b9c5d4';
+  const lineWidth = fixed ? 2.2 : assigned ? 1.8 : 1.4;
+  drawRoundRect(ctx, x, y, width, height, 12, fill, stroke, lineWidth);
+  if (fixed) {
+    ctx.fillStyle = '#c99700';
+    ctx.font = '700 11px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('📌', x + width - 8, y + 15);
+  }
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#98a2b3';
+  ctx.font = '600 11px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillText(label, x + 10, y + 15);
+
+  const innerWidth = width - 20;
+  ctx.fillStyle = blocked ? '#667085' : '#101828';
+  ctx.font = '700 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  const lines = fitLines(ctx, blocked ? 'Gesperrt' : (name || 'Freier Platz'), innerWidth, 2);
+  lines.forEach((line, index) => ctx.fillText(line, x + 10, y + 38 + index * 16));
+
+  if (category) {
+    ctx.fillStyle = '#3157d5';
+    ctx.font = '700 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    ctx.fillText(category, x + 10, y + height - 10);
+  }
+}
+
+function drawExportHeader(ctx, width, title, subtitleParts) {
+  ctx.fillStyle = '#475467';
+  ctx.font = '700 12px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Sitzplatzgenerator', 48, 36);
+  ctx.fillStyle = '#101828';
+  ctx.font = '800 28px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillText(title, 48, 72);
+  ctx.fillStyle = '#475467';
+  ctx.font = '600 15px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillText(subtitleParts.join(' · ') || 'Ohne Projektangaben', 48, 98);
+  ctx.textAlign = 'right';
+  ctx.fillText(formattedDate(), width - 48, 98);
+}
+
+function standardSeatX(col, seatWidth, gap, extraGap) {
+  let x = 64;
+  if (state.seatLayout !== 'double') return x + col * (seatWidth + gap);
+  for (let c = 0; c < col; c++) x += seatWidth + gap + (c % 2 === 0 ? extraGap : 0);
+  return x;
+}
+
+function renderHospitantStandardCanvas() {
+  const seatWidth = state.cols <= 6 ? 136 : state.cols <= 9 ? 122 : 108;
+  const seatHeight = 88;
+  const gap = 14;
+  const extraGap = state.seatLayout === 'double' ? 18 : 0;
+  let gridWidth = 0;
+  for (let c = 0; c < state.cols; c++) {
+    gridWidth = Math.max(gridWidth, standardSeatX(c, seatWidth, gap, extraGap) + seatWidth - 64);
+  }
+  const width = Math.max(980, gridWidth + 128);
+  const gridY = 170;
+  const height = Math.max(780, gridY + state.rows * (seatHeight + 16) + 120);
+  const { canvas, ctx } = createExportCanvas(width, height);
+  drawExportHeader(ctx, width, 'Hospitantenansicht', [...metadataParts(), 'Blickrichtung zur Tafel']);
+  drawCenteredLabel(ctx, Math.max(64, (width - Math.min(680, width - 128)) / 2), 120, Math.min(680, width - 128), 34, 'TAFEL / VORNE');
+
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      const key = seatKey(r, c);
+      const active = state.activeSeats.has(key);
+      const student = studentById(state.assignment.get(key));
+      const x = standardSeatX(c, seatWidth, gap, extraGap);
+      const y = gridY + r * (seatHeight + 16);
+      drawSeatBox(ctx, {
+        x,
+        y,
+        width: seatWidth,
+        height: seatHeight,
+        label: `R${r + 1} · P${c + 1}`,
+        name: student ? student.name : '',
+        category: active && student ? (student.category || '') : '',
+        blocked: !active,
+        assigned: Boolean(active && student),
+        fixed: active && Boolean(student) && isFixedSeat(key),
+      });
+    }
+  }
+
+  drawCenteredLabel(ctx, Math.max(64, (width - Math.min(680, width - 128)) / 2), height - 54, Math.min(680, width - 128), 34, 'HOSPITANT / BEOBACHTER', '#475467');
+  return canvas;
+}
+
+function drawGroupSurface(ctx, cx, cy, width, height, angleDeg, label) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate((angleDeg * Math.PI) / 180);
+  drawRoundRect(ctx, -width / 2, -height / 2, width, height, 10, '#e7edf5', '#687a91', 2);
+  ctx.fillStyle = '#344054';
+  ctx.textAlign = 'center';
+  ctx.font = '800 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillText(label, 0, 0);
+  ctx.restore();
+}
+
+function renderHospitantGroupCanvas() {
+  const columns = groupTableColumns();
+  const rows = groupTableRows();
+  const cardWidth = state.groupSeatsPerTable >= 8 ? 245 : state.groupSeatsPerTable >= 6 ? 265 : 285;
+  const cardHeight = state.groupSeatsPerTable >= 8 ? 225 : 245;
+  const gapX = 26;
+  const gapY = 26;
+  const width = Math.max(1100, 90 + columns * cardWidth + (columns - 1) * gapX + 90);
+  const gridY = 164;
+  const height = Math.max(820, gridY + rows * cardHeight + (rows - 1) * gapY + 120);
+  const { canvas, ctx } = createExportCanvas(width, height);
+  drawExportHeader(ctx, width, 'Hospitantenansicht', [...metadataParts(), 'Blickrichtung zur Tafel']);
+  drawCenteredLabel(ctx, Math.max(64, (width - Math.min(760, width - 128)) / 2), 120, Math.min(760, width - 128), 34, 'TAFEL / VORNE');
+
+  for (let tableIndex = 0; tableIndex < state.groupTableCount; tableIndex++) {
+    const pos = groupTableGridPosition(tableIndex);
+    const x = 45 + pos.col * (cardWidth + gapX);
+    const y = gridY + pos.row * (cardHeight + gapY);
+    drawRoundRect(ctx, x, y, cardWidth, cardHeight, 18, '#fbfcfe', '#dbe2ea', 1.4);
+
+    const centerX = x + cardWidth / 2;
+    const centerY = y + cardHeight / 2;
+    drawGroupSurface(ctx, centerX, centerY, cardWidth * 0.42, cardHeight * 0.26, groupRotation(tableIndex), `Tisch ${tableIndex + 1}`);
+
+    for (let seatIndex = 0; seatIndex < state.groupSeatsPerTable; seatIndex++) {
+      const angle = ((-90 + groupRotation(tableIndex) + (seatIndex * 360 / state.groupSeatsPerTable)) * Math.PI) / 180;
+      const seatX = centerX + Math.cos(angle) * (cardWidth * 0.32) - 45;
+      const seatY = centerY + Math.sin(angle) * (cardHeight * 0.33) - 30;
+      const key = seatKey(tableIndex, seatIndex);
+      const active = state.activeSeats.has(key);
+      const student = studentById(state.assignment.get(key));
+      drawSeatBox(ctx, {
+        x: seatX,
+        y: seatY,
+        width: 90,
+        height: 60,
+        label: `T${tableIndex + 1} · P${seatIndex + 1}`,
+        name: student ? student.name : '',
+        category: active && student ? (student.category || '') : '',
+        blocked: !active,
+        assigned: Boolean(active && student),
+        fixed: active && Boolean(student) && isFixedSeat(key),
+      });
+    }
+  }
+
+  drawCenteredLabel(ctx, Math.max(64, (width - Math.min(760, width - 128)) / 2), height - 54, Math.min(760, width - 128), 34, 'HOSPITANT / BEOBACHTER', '#475467');
+  return canvas;
+}
+
+function exportHospitantView() {
+  readMetadataFromInputs();
+  const canvas = isGroupLayout() ? renderHospitantGroupCanvas() : renderHospitantStandardCanvas();
+  const safe = value => String(value || '').replace(/[^a-z0-9äöüß_-]+/gi, '-').replace(/^-+|-+$/g, '');
+  const datePart = new Intl.DateTimeFormat('sv-SE').format(new Date());
+  const parts = ['Hospitantenansicht', state.metadata.className, state.metadata.subject, state.metadata.roomName, datePart]
+    .map(value => safe(value))
+    .filter(Boolean);
+  const link = document.createElement('a');
+  link.href = canvas.toDataURL('image/png');
+  link.download = `${parts.join('_') || 'Hospitantenansicht'}.png`;
+  link.click();
+}
+
 function setPrintMode(mode) {
   document.body.classList.remove('print-teacher', 'print-classbook');
   if (mode === 'teacher') document.body.classList.add('print-teacher');
@@ -1150,6 +1388,7 @@ els.clearLocalBtn.addEventListener('click', clearLocalProject);
 els.printBtn.addEventListener('click', printRoomView);
 els.teacherPrintBtn.addEventListener('click', printTeacherView);
 els.classbookPrintBtn.addEventListener('click', printClassbookView);
+els.hospitantExportBtn.addEventListener('click', exportHospitantView);
 els.loadInput.addEventListener('change', async event => {
   const file = event.target.files?.[0];
   if (!file) return;
